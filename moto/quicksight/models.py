@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Any
 
 from moto.core.base_backend import BackendDict, BaseBackend
 from moto.utilities.paginator import paginate
@@ -9,6 +9,7 @@ from .data_models import (
     QuicksightIngestion,
     QuicksightMembership,
     QuicksightUser,
+    QuicksightDataSource,
 )
 from .exceptions import ResourceNotFoundException
 from .utils import PAGINATION_MODEL, QuicksightSearchFilterFactory
@@ -25,6 +26,7 @@ class QuickSightBackend(BaseBackend):
         super().__init__(region_name, account_id)
         self.groups: Dict[str, QuicksightGroup] = dict()
         self.users: Dict[str, QuicksightUser] = dict()
+        self.data_sources: Dict[str, QuicksightDataSource] = dict()
 
     def create_data_set(self, data_set_id: str, name: str) -> QuicksightDataSet:
         return QuicksightDataSet(
@@ -186,6 +188,48 @@ class QuickSightBackend(BaseBackend):
         group = self.describe_group(aws_account_id, namespace, group_name)
         group.description = description
         return group
+
+    def create_data_source(
+        self,
+        data_source_id: str | None,
+        name: str | None,
+        account_id: str | None,
+        ds_type: str | None,
+        data_source_parameters: Dict[str, Any] | None,
+        credentials: Dict[str, Any] | None,
+        permissions: List[Dict[str, Any]] | None,
+        vpc_connection_properties: Dict[str, str] | None,
+        ssl_properties: Dict[str, str] | None,
+        tags: List[Dict[str, str]] | None,
+        folder_arns: List[str] | None,
+    ) -> QuicksightDataSource:
+        data_source = QuicksightDataSource(
+            region=self.region_name,
+            account_id=account_id,
+            data_source_id=data_source_id,
+            name=name,
+            ds_type=ds_type,
+            data_source_parameters=data_source_parameters,
+            credentials=credentials,
+            permissions=permissions,
+            vpc_connection_properties=vpc_connection_properties,
+            ssl_properties=ssl_properties,
+            tags=tags,
+            folder_arns=folder_arns,
+        )
+        _id = _create_id(account_id, "", data_source_id)
+        self.data_sources[_id] = data_source
+        return data_source
+
+    def describe_data_source(
+        self,
+        account_id: str,
+        data_source_id: str,
+    ) -> QuicksightDataSource:
+        _id = _create_id(account_id, "", data_source_id)
+        if _id not in self.data_sources:
+            raise ResourceNotFoundException(f"DataSource '{data_source_id}' not found")
+        return self.data_sources[_id]
 
 
 quicksight_backends = BackendDict(QuickSightBackend, "quicksight")

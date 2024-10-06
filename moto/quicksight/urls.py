@@ -18,4 +18,8 @@ url_paths = {
     r"{0}/accounts/(?P<account_id>[\d]+)/namespaces/(?P<namespace>[a-zA-Z0-9._-]+)/users/(?P<username>[^/]+)$": QuickSightResponse.dispatch,
     r"{0}/accounts/(?P<account_id>[\d]+)/namespaces/(?P<namespace>[a-zA-Z0-9._-]+)/users/(?P<username>[^/]+)/groups$": QuickSightResponse.dispatch,
     r"{0}/accounts/(?P<account_id>[\d]+)/namespaces/(?P<namespace>[a-zA-Z0-9._-]+)/groups-search$": QuickSightResponse.dispatch,
+    r"{0}/accounts/(?P<account_id>[\d]+)/data-sources": QuickSightResponse.dispatch,
+    r"{0}/accounts/(?P<account_id>[\d]+)/search/data-sources": QuickSightResponse.dispatch,
+    r"{0}/accounts/(?P<account_id>[\d]+)/data-sources/(?P<datasourceid>[^/]+)": QuickSightResponse.dispatch,
+    r"{0}/accounts/(?P<account_id>[\d]+)/data-sources/(?P<datasourceid>[^/]+)/permissions": QuickSightResponse.dispatch,
 }

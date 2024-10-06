@@ -218,3 +218,45 @@ class QuickSightResponse(BaseResponse):
         return json.dumps(
             {"NextToken": next_token, "GroupList": [g.to_json() for g in groups]}
         )
+
+    def create_data_source(self) -> str:
+        body_params = json.loads(self.body)
+        account_id = self._get_param("AwsAccountId")
+        data_source_id = body_params.get("DataSourceId", None)
+        name = body_params.get("Name", None)
+        ds_type = body_params.get("Type", None)
+        data_source_parameters = body_params.get("DataSourceParameters", None)
+        credentials = body_params.get("Credentials", None)
+        permissions = body_params.get("Permissions", None)
+        vpc_connection_properties = body_params.get("VpcConnectionProperties", None)
+        ssl_properties = body_params.get("SslProperties", None)
+        tags = body_params.get("Tags", None)
+        folder_arns = body_params.get("FolderArns", None)
+        data_source = self.quicksight_backend.create_data_source(
+            data_source_id=data_source_id,
+            name=name,
+            account_id=account_id,
+            ds_type=ds_type,
+            data_source_parameters=data_source_parameters,
+            credentials=credentials,
+            permissions=permissions,
+            vpc_connection_properties=vpc_connection_properties,
+            ssl_properties=ssl_properties,
+            tags=tags,
+            folder_arns=folder_arns,
+        )
+        return json.dumps(
+            {
+                "Arn": data_source.arn,
+                "DataSourceId": data_source.data_source_id,
+                "CreationStatus": data_source.status,
+            }
+        )
+
+    def describe_data_source(self) -> str:
+        account_id = self._get_param("AwsAccountId")
+        data_source_id = self._get_param("DataSourceId")
+        data_source = self.quicksight_backend.describe_data_source(
+            account_id=account_id, data_source_id=data_source_id
+        )
+        return json.dumps(dict(DataSource=data_source.to_json()))

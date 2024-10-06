@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 from moto.core.common_models import BaseModel
 from moto.moto_api._internal import mock_random as random
 from moto.utilities.utils import get_partition
+from datetime import datetime, timezone
 
 
 class QuicksightDataSet(BaseModel):
@@ -117,4 +118,70 @@ class QuicksightUser(BaseModel):
             "UserName": self.username,
             "Active": self.active,
             "PrincipalId": self.principal_id,
+        }
+
+
+class QuicksightDataSource(BaseModel):
+    def __init__(
+        self,
+        region: str,
+        account_id: str | None,
+        data_source_id: str | None,
+        name: str | None,
+        ds_type: str | None,
+        data_source_parameters: Dict[str, Any] | None,
+        credentials: Dict[str, Any] | None,
+        permissions: List[Dict[str, Any]] | None,
+        vpc_connection_properties: Dict[str, str] | None,
+        ssl_properties: Dict[str, str] | None,
+        tags: List[Dict[str, str]] | None,
+        folder_arns: List[str] | None,
+    ):
+        self.arn = f"arn:{get_partition(region)}:quicksight:{region}:{account_id}:data-source/{data_source_id}"
+        self.data_source_id = data_source_id
+        self.name = name
+        # name variable ds_type to avoid conflict with function type()
+        self.ds_type = ds_type
+        self.data_source_parameters = data_source_parameters
+        self.permissions = permissions
+        self.vpc_connection_properties = vpc_connection_properties
+        self.ssl_properties = ssl_properties
+        self.tags = tags
+        self.folder_arns = folder_arns
+        self.created_time: datetime = datetime.now(timezone.utc)
+        self.last_updated_time: datetime = self.created_time
+        self.username = ""
+        self.password = ""
+        self.alternate_data_source_parameters = list()
+        self.secret_arn = ""
+        if credentials:
+            self.username = credentials.get("Username", "")
+            self.password = credentials.get("Password", "")
+            if credentials.get("AlternateDataSourceParameters", None):
+                self.alternate_data_source_parameters = credentials.get(
+                    "AlternateDataSourceParameters"
+                )
+            if credentials.get("SecretArn", None):
+                self.secret_arn = credentials.get("SecretArn")
+
+        # this two properties can be used to identify errors during creation.
+        # Need to check what the real world QS API does.
+        self.status = "CREATION_SUCCESSFUL"
+        self.error_info = dict()
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "Arn": self.arn,
+            "DataSourceId": self.data_source_id,
+            "Name": self.name,
+            "Type": self.ds_type,
+            "Status": self.status,
+            "CreatedTime": self.created_time.isoformat(),
+            "LastUpdatedTime": self.last_updated_time.isoformat(),
+            "DataSourceParameters": self.data_source_parameters,
+            "AlternateDataSourceParameters": self.alternate_data_source_parameters,
+            "VpcConnectionProperties": self.vpc_connection_properties,
+            "SslProperties": self.ssl_properties,
+            "ErrorInfo": self.error_info,
+            "SecretArn": self.secret_arn,
         }
