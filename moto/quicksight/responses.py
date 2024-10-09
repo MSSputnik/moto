@@ -218,3 +218,44 @@ class QuickSightResponse(BaseResponse):
         return json.dumps(
             {"NextToken": next_token, "GroupList": [g.to_json() for g in groups]}
         )
+
+    def create_folder(self) -> str:
+        account_id = self._get_param("AwsAccountId")
+        folder_id = unquote(self._get_param("FolderId"))
+        params = json.loads(self.body)
+        name = params.get("Name", None)
+        folder_type = params.get("FolderType", "SHARED")
+        parent_folder_arn = params.get("ParentFolderArn")
+        permissions = params.get("Permissions")
+        tags = params.get("Tags")
+        sharing_model = params.get("SharingModel", "ACCOUNT")
+        folder = self.quicksight_backend.create_folder(
+            account_id=account_id,
+            region=self.region,
+            folder_id=folder_id,
+            name=name,
+            folder_type=folder_type,
+            parent_folder_arn=parent_folder_arn,
+            permissions=permissions,
+            tags=tags,
+            sharing_model=sharing_model,
+        )
+        return json.dumps({"Arn": folder.arn, "FolderId": folder.folder_id})
+
+    def describe_folder(self) -> str:
+        account_id = self._get_param("AwsAccountId")
+        folder_id = unquote(self._get_param("FolderId"))
+        folder = self.quicksight_backend.describe_folder(account_id, folder_id)
+        return json.dumps(dict(Folder=folder.to_json()))
+
+    def describe_folder_permissions(self) -> str:
+        account_id = self._get_param("AwsAccountId")
+        folder_id = unquote(self._get_param("FolderId"))
+        folder = self.quicksight_backend.describe_folder(account_id, folder_id)
+        return json.dumps(dict(Permissions=folder.permissions_to_json()))
+
+    def describe_folder_resolved_permissions(self) -> str:
+        account_id = self._get_param("AwsAccountId")
+        folder_id = unquote(self._get_param("FolderId"))
+        folder = self.quicksight_backend.describe_folder(account_id, folder_id)
+        return json.dumps(dict(Permissions=folder.permissions_to_json()))

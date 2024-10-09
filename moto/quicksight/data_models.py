@@ -1,8 +1,12 @@
-from typing import Any, Dict, List, Union
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Literal, Union
 
 from moto.core.common_models import BaseModel
 from moto.moto_api._internal import mock_random as random
+from moto.utilities.tagging_service import TaggingService
 from moto.utilities.utils import get_partition
+
+from .exceptions import InvalidParameterValueException
 
 
 class QuicksightDataSet(BaseModel):
@@ -118,3 +122,113 @@ class QuicksightUser(BaseModel):
             "Active": self.active,
             "PrincipalId": self.principal_id,
         }
+
+
+class QuicksightPermission(BaseModel):
+    folder_viewer_actions = ["quicksight:DescribeFolder"]
+    folder_author_actions = [
+        "quicksight:CreateFolder",
+        "quicksight:DescribeFolder",
+        "quicksight:CreateFolderMembership",
+        "quicksight:DeleteFolderMembership",
+        "quicksight:DescribeFolderPermissions",
+    ]
+    folder_owner_actions = [
+        "quicksight:CreateFolder",
+        "quicksight:DescribeFolder",
+        "quicksight:UpdateFolder",
+        "quicksight:DeleteFolder",
+        "quicksight:CreateFolderMembership",
+        "quicksight:DeleteFolderMembership",
+        "quicksight:DescribeFolderPermissions",
+        "quicksight:UpdateFolderPermissions",
+    ]
+
+    def __init__(
+        self,
+        *,
+        prinicpal: Union[str, None] = None,
+        actions: Union[List[str], None] = None,
+        permission: Union[Dict[str, Any], None] = None,
+    ):
+        if not permission:
+            self.principal: str = prinicpal if prinicpal else ""
+            self.actions: List[str] = actions if actions else list()
+        else:
+            self.principal = permission.get("Principal", "")
+            self.actions = permission.get("Actions", list())
+
+    def validate_permission_set(self, resource: Literal["FOLDER"]) -> bool:
+        valid = False
+        if resource == "FOLDER":
+            for check_list in [
+                self.folder_viewer_actions,
+                self.folder_author_actions,
+                self.folder_owner_actions,
+            ]:
+                sorted_set = sorted(check_list)
+                sorted_actions = sorted(self.actions)
+                if sorted_set == sorted_actions:
+                    valid = True
+                    break
+            if not valid:
+                raise InvalidParameterValueException(
+                    f"ResourcePermission list contains unsupported permission sets {self.actions} for this resource. Valid sets : {self.folder_viewer_actions} or {self.folder_author_actions} or {self.folder_owner_actions}"
+                )
+            return True
+        raise InvalidParameterValueException(
+            f"MOTO: Unknown Permission Set for {resource}"
+        )
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"Principal": self.principal, "Actions": self.actions}
+
+
+class QuicksightFolder(BaseModel):
+    def __init__(
+        self,
+        account_id: str,
+        region: str,
+        folder_id: str,
+        name: str,
+        folder_type: str,
+        parent_folder_arn: str,
+        permissions: List[QuicksightPermission],
+        tags: List[Dict[str, str]],
+        sharing_model: str,
+    ):
+        self.tagger = TaggingService()
+        self.arn = f"arn:{get_partition(region)}:quicksight:{region}:{account_id}:folder/{folder_id}"
+        self.account_id = account_id
+        self.region = region
+        self.folder_id = folder_id
+        self.name = name
+        self.folder_type = folder_type
+        self.parent_folder_arn = parent_folder_arn
+        if tags:
+            self.tagger.tag_resource(self.arn, tags)
+        self.sharing_model = sharing_model
+        self.created_time = datetime.now(timezone.utc)
+        self.last_updated_time = self.created_time
+        self.permissions = permissions
+
+    def get_folder_path(self) -> List[str]:
+        """Get Folder Path not yet implemented."""
+        return list()
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "FolderId": self.folder_id,
+            "Arn": self.arn,
+            "Name": self.name,
+            "FolderType": self.folder_type,
+            "FolderPath": self.get_folder_path(),
+            "CreatedTime": self.created_time.isoformat(),
+            "LastUpdatedTime": self.last_updated_time.isoformat(),
+            "SharingModel": self.sharing_model,
+        }
+
+    def permissions_to_json(self) -> Dict[str, Any]:
+        if self.permissions:
+            return [permission.to_json() for permission in self.permissions]
+        return []

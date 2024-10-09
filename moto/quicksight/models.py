@@ -1,16 +1,23 @@
-from typing import Dict, List
+import re
+from typing import Any, Dict, List
 
 from moto.core.base_backend import BackendDict, BaseBackend
 from moto.utilities.paginator import paginate
 
 from .data_models import (
     QuicksightDataSet,
+    QuicksightFolder,
     QuicksightGroup,
     QuicksightIngestion,
     QuicksightMembership,
+    QuicksightPermission,
     QuicksightUser,
 )
-from .exceptions import ResourceNotFoundException
+from .exceptions import (
+    InvalidParameterValueException,
+    ResourceNotFoundException,
+    ValidationException,
+)
 from .utils import PAGINATION_MODEL, QuicksightSearchFilterFactory
 
 
@@ -25,6 +32,28 @@ class QuickSightBackend(BaseBackend):
         super().__init__(region_name, account_id)
         self.groups: Dict[str, QuicksightGroup] = dict()
         self.users: Dict[str, QuicksightUser] = dict()
+        self.folder: Dict[str, QuicksightFolder] = dict()
+
+    def is_valid_principal_arn(
+        self, account_id: str, namespace: str = "", arn: str = ""
+    ) -> bool:
+        id_for_ns = f"{account_id}:"
+        group_found = any(
+            [
+                group
+                for _id, group in self.groups.items()
+                if _id.startswith(id_for_ns) and group.arn == arn
+            ]
+        )
+        if group_found:
+            return True
+        return any(
+            [
+                user
+                for _id, user in self.users.items()
+                if _id.startswith(id_for_ns) and user.arn == arn
+            ]
+        )
 
     def create_data_set(self, data_set_id: str, name: str) -> QuicksightDataSet:
         return QuicksightDataSet(
@@ -186,6 +215,76 @@ class QuickSightBackend(BaseBackend):
         group = self.describe_group(aws_account_id, namespace, group_name)
         group.description = description
         return group
+
+    def create_folder(
+        self,
+        account_id: str,
+        region: str,
+        folder_id: str,
+        name: str,
+        folder_type: str,
+        parent_folder_arn: str,
+        permissions: List[Dict[str, Any]],
+        tags: List[Dict[str, str]],
+        sharing_model: str,
+    ) -> QuicksightFolder:
+        # Test valid folder_id
+        validation_errors: List[str] = []
+        if not re.match(r"^[\w\-]+$", folder_id):
+            validation_errors.append(
+                f"Value '{folder_id}' at 'folderId' failed to satisfy constraint: Member must satisfy regular expression pattern: [\\w\\-]+"
+            )
+
+        if len(validation_errors) > 0:
+            raise ValidationException(
+                f"{len(validation_errors)} validation error detected: {validation_errors[0]}"
+            )
+        if not name:
+            raise InvalidParameterValueException("No folder name found")
+        folder_permissions: List[QuicksightPermission] = list()
+        if isinstance(permissions, list):
+            for permission in permissions:
+                if isinstance(permission, dict):
+                    new_permission = QuicksightPermission(permission=permission)
+                    if self.is_valid_principal_arn(
+                        account_id=account_id, arn=new_permission.principal
+                    ) and new_permission.validate_permission_set("FOLDER"):
+                        folder_permissions.append(new_permission)
+                    else:
+                        raise InvalidParameterValueException(
+                            f"Principal ARN {new_permission.principal} is not part of the same account {account_id}"
+                        )
+
+        folder = QuicksightFolder(
+            account_id=account_id,
+            region=region,
+            folder_id=folder_id,
+            name=name,
+            folder_type=folder_type,
+            parent_folder_arn=parent_folder_arn,
+            permissions=folder_permissions,
+            tags=tags,
+            sharing_model=sharing_model,
+        )
+        _id = _create_id(account_id, "", folder_id)
+        self.folder[_id] = folder
+        return folder
+
+    def describe_folder(self, account_id: str, folder_id: str) -> QuicksightFolder:
+        validation_errors: List[str] = []
+        if not re.match(r"^[\w\-]+$", folder_id):
+            validation_errors.append(
+                f"Value '{folder_id}' at 'folderId' failed to satisfy constraint: Member must satisfy regular expression pattern: [\\w\\-]+"
+            )
+
+        if len(validation_errors) > 0:
+            raise ValidationException(
+                f"{len(validation_errors)} validation error detected: {validation_errors[0]}"
+            )
+        _id = _create_id(account_id, "", folder_id)
+        if _id not in self.folder:
+            raise ResourceNotFoundException(f"Folder {folder_id} not found")
+        return self.folder[_id]
 
 
 quicksight_backends = BackendDict(QuickSightBackend, "quicksight")
